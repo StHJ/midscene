@@ -1,4 +1,5 @@
 import type { WebPage } from '@/common/page';
+import fs from 'fs';
 import {
   type AgentAssertOpt,
   type AgentDescribeElementAtPointResult,
@@ -55,6 +56,8 @@ import {
 } from './ui-utils';
 import { printReportMsg, reportFileName } from './utils';
 import { type WebUIContext, parseContextFromWebPage } from './utils';
+import { writeFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 
 const debug = getDebug('web-integration');
 
@@ -442,6 +445,20 @@ export class PageAgent<PageType extends WebPage = WebPage> {
   ) {
     const { output, executor } = await this.taskExecutor.query(demand, opt);
     this.afterTaskRunning(executor);
+
+    // 添加文件输出功能  
+    if (process.env.MIDSCENE_OUT_PUT_FILE) {
+      const outputPath = resolve(
+        process.cwd(),
+        process.env.MIDSCENE_OUT_PUT_FILE,
+      );
+      const outputDir = dirname(outputPath);
+      if (!fs.existsSync(outputDir)) {
+        fs.mkdirSync(outputDir, { recursive: true });
+      }
+      writeFileSync(outputPath, JSON.stringify(output, undefined, 2));
+    }
+
     return output;
   }
 
