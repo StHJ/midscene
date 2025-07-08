@@ -11,6 +11,9 @@ import {
   AZURE_OPENAI_DEPLOYMENT,
   AZURE_OPENAI_ENDPOINT,
   AZURE_OPENAI_KEY,
+  getAIConfig,
+  getAIConfigInBoolean,
+  getAIConfigInJson,
   MIDSCENE_API_TYPE,
   MIDSCENE_AZURE_OPENAI_INIT_CONFIG_JSON,
   MIDSCENE_AZURE_OPENAI_SCOPE,
@@ -23,21 +26,15 @@ import {
   MIDSCENE_OPENAI_SOCKS_PROXY,
   MIDSCENE_USE_ANTHROPIC_SDK,
   MIDSCENE_USE_AZURE_OPENAI,
-  MIDSCENE_USE_QWEN_VL,
-  MIDSCENE_USE_VLM_UI_TARS,
   OPENAI_API_KEY,
   OPENAI_BASE_URL,
   OPENAI_MAX_TOKENS,
   OPENAI_USE_AZURE,
-  getAIConfig,
-  getAIConfigInBoolean,
-  getAIConfigInJson,
   uiTarsModelVersion,
   vlLocateMode,
 } from '@midscene/shared/env';
 import { enableDebug, getDebug } from '@midscene/shared/logger';
-import { assert } from '@midscene/shared/utils';
-import { ifInBrowser } from '@midscene/shared/utils';
+import { assert, ifInBrowser } from '@midscene/shared/utils';
 import dJSON from 'dirty-json';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 import OpenAI, { AzureOpenAI } from 'openai';
@@ -355,61 +352,69 @@ export async function callInsureMo(
 
   const startTime = Date.now();
 
-  // 1. 构造请求数据（multipart/form-data）
   const formData = new FormData();
 
-  // 2. 添加文本参数（requirements）
   const requirements = JSON.stringify(messages); // 或按需构造
   formData.append('requirements', requirements);
 
-  // 3. 添加文件参数（files）
   if (file) {
     formData.append('files', file, `file.png`);
   }
 
-  // 4. 发送请求
   debugCall(
     `sending request to https://portal-gw.insuremo.com/mo-re/1.0/aiqa/api/vl`,
   );
 
-  try {
-    const response = await axios.post(
-      'https://portal-gw.insuremo.com/mo-re/1.0/aiqa/api/vl',
-      formData,
-      {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-          'Authorization': 'Bearer MOATzqYEsxsgAUTxFkkL0zhzT3OMfU0e',
+  const maxRetries = 3;
+  let lastError;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    const startTime = Date.now();
+
+    try {
+      const response = await axios.post(
+        'https://portal-gw.insuremo.com/mo-re/1.0/aiqa/api/vl',
+        formData,
+        {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+            Authorization: 'Bearer MOATzqYEsxsgAUTxFkkL0zhzT3OMfU0e',
+          },
         },
-      },
-    );
+      );
 
-    // 5. 解析响应
-    const content = response.data.data; // 假设返回格式为 { content: string, usage?: ... }
-    const usage: Record<string, any> & {
-      prompt_tokens: number;
-      completion_tokens: number;
-      total_tokens: number;
-    } = {
-      prompt_tokens: 2940,
-      completion_tokens: 38,
-      total_tokens: 2978,
-    };
+      const content = response.data.data;
+      const usage: Record<string, any> & {
+        prompt_tokens: number;
+        completion_tokens: number;
+        total_tokens: number;
+      } = {
+        prompt_tokens: 2940,
+        completion_tokens: 38,
+        total_tokens: 2978,
+      };
 
-    debugProfileStats(
-      `cost-ms: ${Date.now() - startTime}, response: ${content}`,
-    );
+      debugProfileStats(
+        `cost-ms: ${Date.now() - startTime}, response: ${content}`,
+      );
 
-    debugProfileDetail(`response detail: ${JSON.stringify(response.data)}`);
+      debugProfileDetail(`response detail: ${JSON.stringify(response.data)}`);
 
-    return { content, usage };
-  } catch (e: any) {
-    const newError = new Error(
-      `failed to call AI model service: ${e.message}`,
-      { cause: e },
-    );
-    throw newError;
+      return { content, usage };
+    } catch (e: any) {
+      lastError = e;
+      if (attempt < maxRetries) {
+        console.log(`Attempt ${attempt} failed. Retrying...`);
+        // Optional: add a delay before retrying
+        // await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+      }
+    }
   }
+
+  throw new Error(
+    `failed to call AI model service after ${maxRetries} attempts: ${lastError.message}`,
+    { cause: lastError },
+  );
 }
 
 export async function callToGetJSONObject<T>(
