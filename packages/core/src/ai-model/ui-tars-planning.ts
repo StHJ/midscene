@@ -53,7 +53,7 @@ export async function vlmPlanning(options: {
   const { conversationHistory, userInstruction, size } = options;
   const systemPrompt = getUiTarsPlanningPrompt() + userInstruction;
 
-  const res = await callInsureMo(
+  const res = await call(
     [
       {
         role: 'user',

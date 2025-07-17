@@ -452,10 +452,10 @@ export async function callToGetJSONObject<T>(
     responseFormat = { type: AIResponseFormat.JSON };
   }
 
-  const response = await callInsureMo(
+  const response = await call(
     messages,
     AIActionTypeValue,
-    file,
+    // file,
     responseFormat,
   );
   assert(response, 'empty response');
